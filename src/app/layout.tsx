@@ -52,6 +52,9 @@ export const metadata: Metadata = {
     description:
       "Explore 50+ modern, privacy-first online tools. 100% browser-based execution ensures files never leave your device.",
   },
+  other: {
+    "google-adsense-account": "ca-pub-9373773336346391",
+  },
 };
 
 export default function RootLayout({
