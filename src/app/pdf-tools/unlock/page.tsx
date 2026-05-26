@@ -217,9 +217,12 @@ export default function PdfUnlockPage() {
                   <Unlock className="w-6 h-6" />
                 </span>
                 <div>
-                  <h4 className="text-sm font-bold text-foreground">PDF Decrypted Successfully!</h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    All restrictions and passwords have been removed from the file structure.
+                  <h4 className="text-sm font-bold text-foreground">Permissions Removed Successfully!</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                    Owner restrictions (copying, printing, and editing) have been successfully stripped.
+                  </p>
+                  <p className="text-[11px] text-amber-500/80 mt-2 max-w-md mx-auto leading-normal">
+                    ⚠️ <strong>Note:</strong> If the PDF is locked with a "user open password" (viewing restriction), the content streams remain encrypted. To permanently remove a viewing password, open this file in your browser, enter the password once, and select <strong>Print &rarr; Save as PDF</strong>.
                   </p>
                 </div>
                 <div className="flex gap-3 justify-center">
