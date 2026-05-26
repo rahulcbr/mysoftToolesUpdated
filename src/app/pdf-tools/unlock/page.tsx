@@ -7,6 +7,7 @@ import SEOContent from "@/components/tools/SEOContent";
 import { recordRecentTool } from "@/utils/recentTools";
 import { Download, FileText, Lock, Unlock, Loader2, AlertCircle } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
+import { decryptPDF } from "@pdfsmaller/pdf-decrypt";
 
 export default function PdfUnlockPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -57,16 +58,23 @@ export default function PdfUnlockPage() {
     setError(null);
 
     try {
-      const fileBytes = await file.arrayBuffer();
-      let pdfDoc;
+      const arrayBuffer = await file.arrayBuffer();
+      const fileBytes = new Uint8Array(arrayBuffer);
       
+      let decryptedBytes: Uint8Array;
       try {
-        pdfDoc = await PDFDocument.load(fileBytes, { ignoreEncryption: true });
+        decryptedBytes = await decryptPDF(fileBytes, password);
       } catch (err: any) {
-        throw new Error("Invalid document structure or unsupported encryption format.");
+        throw new Error("Incorrect password. Please verify and try again.");
       }
 
-      const decryptedBytes = await pdfDoc.save();
+      // Verify the decrypted PDF loads without any decryption settings
+      try {
+        await PDFDocument.load(decryptedBytes.buffer as ArrayBuffer);
+      } catch (err: any) {
+        throw new Error("Incorrect password or unsupported encryption strength.");
+      }
+
       const decryptedBlob = new Blob([decryptedBytes.buffer as ArrayBuffer], { type: "application/pdf" });
       
       if (decryptedUrl) {
@@ -217,12 +225,9 @@ export default function PdfUnlockPage() {
                   <Unlock className="w-6 h-6" />
                 </span>
                 <div>
-                  <h4 className="text-sm font-bold text-foreground">Permissions Removed Successfully!</h4>
+                  <h4 className="text-sm font-bold text-foreground">PDF Unlocked Successfully!</h4>
                   <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-                    Owner restrictions (copying, printing, and editing) have been successfully stripped.
-                  </p>
-                  <p className="text-[11px] text-amber-500/80 mt-2 max-w-md mx-auto leading-normal">
-                    ⚠️ <strong>Note:</strong> If the PDF is locked with a "user open password" (viewing restriction), the content streams remain encrypted. To permanently remove a viewing password, open this file in your browser, enter the password once, and select <strong>Print &rarr; Save as PDF</strong>.
+                    All password protection and editing restrictions have been permanently removed.
                   </p>
                 </div>
                 <div className="flex gap-3 justify-center">
