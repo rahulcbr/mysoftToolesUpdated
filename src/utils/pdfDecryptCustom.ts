@@ -1,4 +1,7 @@
-import {
+import * as PDFLib from "pdf-lib";
+import { decryptPDF as originalDecryptPDF } from "@pdfsmaller/pdf-decrypt";
+
+const {
   PDFDocument,
   PDFName,
   PDFHexString,
@@ -6,9 +9,11 @@ import {
   PDFDict,
   PDFArray,
   PDFRawStream,
-  PDFRef
-} from "pdf-lib";
-import { decryptPDF as originalDecryptPDF } from "@pdfsmaller/pdf-decrypt";
+  PDFRef,
+  PDFObjectStreamParser,
+  PDFParser,
+  ParseSpeeds
+} = PDFLib as any;
 
 // Standard PDF padding string
 const PADDING = new Uint8Array([
@@ -17,6 +22,24 @@ const PADDING = new Uint8Array([
   0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80,
   0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
 ]);
+
+export function patchObjStmBytes(bytes: Uint8Array): Uint8Array {
+  const patched = new Uint8Array(bytes);
+  for (let i = 0; i < patched.length - 6; i++) {
+    if (
+      patched[i] === 47 && // '/'
+      patched[i+1] === 79 && // 'O'
+      patched[i+2] === 98 && // 'b'
+      patched[i+3] === 106 && // 'j'
+      patched[i+4] === 83 && // 'S'
+      patched[i+5] === 116 && // 't'
+      patched[i+6] === 109    // 'm'
+    ) {
+      patched[i+6] = 88; // 'X'
+    }
+  }
+  return patched;
+}
 
 // === Minimal MD5 Implementation ===
 export function md5(data: Uint8Array): Uint8Array {
@@ -553,14 +576,14 @@ async function decryptStringsV4(
   }
 }
 
-// === Main API wrapper ===
 export async function decryptPDFCustom(pdfBytes: Uint8Array, passwordStr: string): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.load(pdfBytes, {
+  // First, parse encryption parameters by doing a lightweight load of the original bytes
+  const tempDoc = await PDFDocument.load(pdfBytes, {
     ignoreEncryption: true,
     updateMetadata: false
   });
   
-  const encryptParams = readEncryptParamsCustom(pdfDoc.context);
+  const encryptParams = readEncryptParamsCustom(tempDoc.context);
   
   if (!encryptParams) {
     throw new Error('This PDF is not encrypted. No /Encrypt dictionary found.');
@@ -573,8 +596,8 @@ export async function decryptPDFCustom(pdfBytes: Uint8Array, passwordStr: string
 
   const { algorithm, version, permissions, fileId, ownerKey, userKey, encryptRef, encryptMetadata } = encryptParams;
   
-  const encryptRefNum = (encryptRef instanceof PDFRef)
-    ? encryptRef.objectNumber
+  const encryptRefNum = (encryptRef && typeof encryptRef === 'object' && 'objectNumber' in encryptRef)
+    ? (encryptRef as any).objectNumber
     : null;
 
   let encryptionKey = validateUserPasswordRC4(passwordStr, encryptParams);
@@ -586,14 +609,36 @@ export async function decryptPDFCustom(pdfBytes: Uint8Array, passwordStr: string
     throw new Error('Incorrect password. The provided password does not match.');
   }
 
-  // Decrypt all objects
-  await decryptAllV4(pdfDoc.context, encryptionKey, algorithm, encryptRefNum, encryptMetadata);
+  // Now, patch the binary bytes to hide Object Streams during initial parsing
+  const patchedBytes = patchObjStmBytes(pdfBytes);
+
+  // Parse the patched bytes using PDFParser directly into a new context
+  const parseSpeed = ParseSpeeds.Slow;
+  const context = await PDFParser.forBytesWithOptions(patchedBytes, parseSpeed, false, false).parseDocument();
+
+  // Decrypt all objects in this clean context
+  await decryptAllV4(context, encryptionKey, algorithm, encryptRefNum, encryptMetadata);
+
+  // Restore and parse the decrypted Object Streams
+  const indirectObjects = context.enumerateIndirectObjects();
+  for (const [ref, obj] of indirectObjects) {
+    if (obj instanceof PDFRawStream && obj.dict) {
+      const type = obj.dict.get(PDFName.of('Type'));
+      if (type && type.toString() === '/ObjStX') {
+        obj.dict.set(PDFName.of('Type'), PDFName.of('ObjStm'));
+        await PDFObjectStreamParser.forStream(obj).parseIntoContext();
+      }
+    }
+  }
 
   // Remove the /Encrypt entry from the trailer
-  const trailer = (pdfDoc.context as any).trailerInfo || (pdfDoc.context as any).trailer;
+  const trailer = (context as any).trailerInfo || (context as any).trailer;
   if (trailer) {
     delete trailer.Encrypt;
   }
+
+  // Construct the final decrypted PDFDocument from the decrypted context
+  const pdfDoc = new PDFDocument(context, false, false);
 
   // Save the decrypted PDF
   const decryptedBytes = await pdfDoc.save({
