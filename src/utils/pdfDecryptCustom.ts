@@ -454,7 +454,7 @@ export function readEncryptParamsCustom(context: any) {
     let cfm = '/V2';
     if (isPDFDict(CF)) {
       const stdCFName = StmF || StrF || PDFName.of('StdCF');
-      const stdCF = CF.get(stdCFName as PDFName);
+      const stdCF = CF.get(stdCFName as any);
       if (isPDFDict(stdCF)) {
         const CFM = stdCF.get(PDFName.of('CFM'));
         if (CFM) {
