@@ -63,7 +63,7 @@ export default function PdfUnlockPage() {
       
       let decryptedBytes: Uint8Array;
       try {
-        decryptedBytes = await decryptPDF(fileBytes, password);
+        decryptedBytes = await decryptPDF(fileBytes, String(password));
       } catch (err: any) {
         throw new Error("Incorrect password. Please verify and try again.");
       }
