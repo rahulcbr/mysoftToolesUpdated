@@ -357,6 +357,8 @@ export function decryptObjectRC4(
   const objectKey = md5(keyInput);
   const rc4 = new RC4(objectKey.slice(0, Math.min(encryptionKey.length + 5, 16)));
   return rc4.process(data);
+}
+
 function isPDFRef(obj: any): boolean {
   return obj && typeof obj === 'object' && 'objectNumber' in obj && 'generationNumber' in obj;
 }
