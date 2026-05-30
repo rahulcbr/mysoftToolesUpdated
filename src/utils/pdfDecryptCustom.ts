@@ -238,6 +238,15 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 export function validateUserPasswordRC4(password: string | Uint8Array, encryptParams: any): Uint8Array | null {
   const { ownerKey, userKey, permissions, fileId, revision, keyLength } = encryptParams;
+  console.log('VALIDATING:', {
+    passwordStr: typeof password === 'string' ? password : '[bytes]',
+    ownerKeyHex: bytesToHex(ownerKey),
+    userKeyHex: bytesToHex(userKey),
+    permissions,
+    fileIdHex: bytesToHex(fileId),
+    revision,
+    keyLength
+  });
   const encryptionKey = computeEncryptionKey(password, ownerKey, permissions, fileId, revision, keyLength);
 
   if (revision === 2) {
@@ -485,7 +494,7 @@ export function readEncryptParamsCustom(context: any) {
     keyLength = lenVal / 8;
   }
 
-  return {
+  const params = {
     version,
     revision,
     ownerKey,
@@ -498,6 +507,16 @@ export function readEncryptParamsCustom(context: any) {
     keyLength,
     encryptMetadata
   };
+  console.log('ENCRYPT_PARAMS:', {
+    version,
+    revision,
+    permissions,
+    keyLength,
+    ownerKeyHex: bytesToHex(ownerKey),
+    userKeyHex: bytesToHex(userKey),
+    fileIdHex: bytesToHex(fileId)
+  });
+  return params;
 }
 
 export async function decryptAllV4(
