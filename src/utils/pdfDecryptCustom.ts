@@ -514,6 +514,9 @@ async function decryptStringsV4(
   if (obj instanceof PDFString) {
     const originalBytes = obj.asBytes();
     if (originalBytes && originalBytes.length > 0) {
+      if (algorithm === 'AES-128' && originalBytes.length < 16) {
+        return;
+      }
       let decrypted: Uint8Array;
       if (algorithm === 'AES-128') {
         decrypted = await decryptObjectAES128(originalBytes, objectNum, generationNum, encryptionKey);
@@ -525,6 +528,9 @@ async function decryptStringsV4(
   } else if (obj instanceof PDFHexString) {
     const originalBytes = obj.asBytes();
     if (originalBytes && originalBytes.length > 0) {
+      if (algorithm === 'AES-128' && originalBytes.length < 16) {
+        return;
+      }
       let decrypted: Uint8Array;
       if (algorithm === 'AES-128') {
         decrypted = await decryptObjectAES128(originalBytes, objectNum, generationNum, encryptionKey);
