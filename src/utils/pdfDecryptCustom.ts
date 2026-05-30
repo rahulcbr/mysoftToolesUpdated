@@ -301,8 +301,8 @@ export async function aesCbcDecrypt(data: Uint8Array, key: Uint8Array, iv: Uint8
   if (!cryptoObj || !cryptoObj.subtle) {
     throw new Error("Web Crypto API is not available");
   }
-  const cryptoKey = await cryptoObj.subtle.importKey('raw', key, 'AES-CBC', false, ['decrypt']);
-  const decrypted = await cryptoObj.subtle.decrypt({ name: 'AES-CBC', iv }, cryptoKey, data);
+  const cryptoKey = await cryptoObj.subtle.importKey('raw', key as any, 'AES-CBC', false, ['decrypt']);
+  const decrypted = await cryptoObj.subtle.decrypt({ name: 'AES-CBC', iv: iv as any }, cryptoKey, data as any);
   return new Uint8Array(decrypted);
 }
 
