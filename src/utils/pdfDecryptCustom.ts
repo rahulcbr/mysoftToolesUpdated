@@ -431,7 +431,7 @@ export function readEncryptParamsCustom(context: any) {
   const userKey = extractBytes(U);
   if (!ownerKey || !userKey) return null;
 
-  let fileId = new Uint8Array(0);
+  let fileId: any = new Uint8Array(0);
   const idArray = trailer.ID;
   if (idArray) {
     if (Array.isArray(idArray) && idArray.length > 0) {
