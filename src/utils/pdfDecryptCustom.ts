@@ -81,12 +81,15 @@ export function md5(data: Uint8Array): Uint8Array {
   msg.set(data);
   msg[msgLen] = 0x80;
 
-  const dataView = new DataView(msg.buffer);
+  const dataView = new DataView(msg.buffer, msg.byteOffset, msg.byteLength);
   dataView.setUint32(msgLenPadded - 8, msgBitLen, true);
   dataView.setUint32(msgLenPadded - 4, 0, true);
 
   for (let offset = 0; offset < msgLenPadded; offset += 64) {
-    const chunk = new Uint32Array(msg.buffer, offset, 16);
+    const chunk = new Uint32Array(16);
+    for (let j = 0; j < 16; j++) {
+      chunk[j] = dataView.getUint32(offset + j * 4, true);
+    }
     let a = a0, b = b0, c = c0, d = d0;
 
     for (let i = 0; i < 64; i++) {
@@ -119,7 +122,7 @@ export function md5(data: Uint8Array): Uint8Array {
   }
 
   const result = new Uint8Array(16);
-  const view = new DataView(result.buffer);
+  const view = new DataView(result.buffer, result.byteOffset, result.byteLength);
   view.setUint32(0, a0, true);
   view.setUint32(4, b0, true);
   view.setUint32(8, c0, true);
@@ -354,15 +357,36 @@ export function decryptObjectRC4(
   const objectKey = md5(keyInput);
   const rc4 = new RC4(objectKey.slice(0, Math.min(encryptionKey.length + 5, 16)));
   return rc4.process(data);
+function isPDFRef(obj: any): boolean {
+  return obj && typeof obj === 'object' && 'objectNumber' in obj && 'generationNumber' in obj;
 }
 
-// === Traversal & Decryption Logic ===
+function isPDFDict(obj: any): boolean {
+  return obj && typeof obj === 'object' && typeof obj.entries === 'function' && typeof obj.get === 'function' && !('contents' in obj);
+}
+
+function isPDFRawStream(obj: any): boolean {
+  return obj && typeof obj === 'object' && 'contents' in obj && 'dict' in obj;
+}
+
+function isPDFString(obj: any): boolean {
+  return obj && typeof obj === 'object' && typeof obj.asBytes === 'function' && typeof obj.asString === 'function' && obj.toString().startsWith('(');
+}
+
+function isPDFHexString(obj: any): boolean {
+  return obj && typeof obj === 'object' && typeof obj.asBytes === 'function' && typeof obj.asString === 'function' && obj.toString().startsWith('<');
+}
+
+function isPDFArray(obj: any): boolean {
+  return obj && typeof obj === 'object' && typeof obj.asArray === 'function' && typeof obj.lookup === 'function';
+}
+
 export function extractBytes(pdfObj: any): Uint8Array | null {
   if (!pdfObj) return null;
-  if (pdfObj instanceof PDFHexString) {
+  if (isPDFHexString(pdfObj)) {
     return hexToBytes(pdfObj.asString());
   }
-  if (pdfObj instanceof PDFString) {
+  if (isPDFString(pdfObj)) {
     return pdfObj.asBytes();
   }
   const str = pdfObj.toString();
@@ -379,15 +403,15 @@ export function readEncryptParamsCustom(context: any) {
   if (!encryptRef) return null;
 
   let encryptDict: any;
-  if (encryptRef instanceof PDFRef) {
+  if (isPDFRef(encryptRef)) {
     encryptDict = context.lookup(encryptRef);
-  } else if (encryptRef instanceof PDFDict) {
+  } else if (isPDFDict(encryptRef)) {
     encryptDict = encryptRef;
   } else {
     return null;
   }
 
-  if (!encryptDict || !(encryptDict instanceof PDFDict)) {
+  if (!encryptDict || !isPDFDict(encryptDict)) {
     return null;
   }
 
@@ -411,7 +435,7 @@ export function readEncryptParamsCustom(context: any) {
   if (idArray) {
     if (Array.isArray(idArray) && idArray.length > 0) {
       fileId = extractBytes(idArray[0]) || new Uint8Array(0);
-    } else if (idArray instanceof PDFArray) {
+    } else if (isPDFArray(idArray)) {
       const firstId = idArray.lookup(0);
       fileId = extractBytes(firstId) || new Uint8Array(0);
     }
@@ -427,10 +451,10 @@ export function readEncryptParamsCustom(context: any) {
     const StrF = encryptDict.get(PDFName.of('StrF'));
     
     let cfm = '/V2';
-    if (CF instanceof PDFDict) {
+    if (isPDFDict(CF)) {
       const stdCFName = StmF || StrF || PDFName.of('StdCF');
       const stdCF = CF.get(stdCFName as PDFName);
-      if (stdCF instanceof PDFDict) {
+      if (isPDFDict(stdCF)) {
         const CFM = stdCF.get(PDFName.of('CFM'));
         if (CFM) {
           cfm = CFM.toString();
@@ -491,12 +515,12 @@ export async function decryptAllV4(
       continue;
     }
 
-    if (obj instanceof PDFDict && !(obj instanceof PDFRawStream)) {
+    if (isPDFDict(obj) && !isPDFRawStream(obj)) {
       const type = obj.get(PDFName.of('Type'));
       if (type && type.toString() === '/Sig') continue;
     }
 
-    if (obj instanceof PDFRawStream && obj.dict) {
+    if (isPDFRawStream(obj) && obj.dict) {
       const type = obj.dict.get(PDFName.of('Type'));
       if (type) {
         const typeName = type.toString();
@@ -505,7 +529,7 @@ export async function decryptAllV4(
       }
     }
 
-    if (obj instanceof PDFRawStream) {
+    if (isPDFRawStream(obj)) {
       const streamData = obj.contents;
       if (streamData && streamData.length > 0) {
         let decrypted: Uint8Array;
@@ -534,7 +558,7 @@ async function decryptStringsV4(
 ) {
   if (!obj) return;
 
-  if (obj instanceof PDFString) {
+  if (isPDFString(obj)) {
     const originalBytes = obj.asBytes();
     if (originalBytes && originalBytes.length > 0) {
       if (algorithm === 'AES-128' && originalBytes.length < 16) {
@@ -548,7 +572,7 @@ async function decryptStringsV4(
       }
       obj.value = Array.from(decrypted).map(b => String.fromCharCode(b)).join('');
     }
-  } else if (obj instanceof PDFHexString) {
+  } else if (isPDFHexString(obj)) {
     const originalBytes = obj.asBytes();
     if (originalBytes && originalBytes.length > 0) {
       if (algorithm === 'AES-128' && originalBytes.length < 16) {
@@ -562,14 +586,14 @@ async function decryptStringsV4(
       }
       obj.value = bytesToHex(decrypted);
     }
-  } else if (obj instanceof PDFDict) {
+  } else if (isPDFDict(obj)) {
     for (const [key, value] of obj.entries()) {
       const keyName = key.asString();
       if (keyName !== '/Length' && keyName !== '/Filter' && keyName !== '/DecodeParms') {
         await decryptStringsV4(value, objectNum, generationNum, encryptionKey, algorithm);
       }
     }
-  } else if (obj instanceof PDFArray) {
+  } else if (isPDFArray(obj)) {
     for (const element of obj.asArray()) {
       await decryptStringsV4(element, objectNum, generationNum, encryptionKey, algorithm);
     }
@@ -622,7 +646,7 @@ export async function decryptPDFCustom(pdfBytes: Uint8Array, passwordStr: string
   // Restore and parse the decrypted Object Streams
   const indirectObjects = context.enumerateIndirectObjects();
   for (const [ref, obj] of indirectObjects) {
-    if (obj instanceof PDFRawStream && obj.dict) {
+    if (isPDFRawStream(obj) && obj.dict) {
       const type = obj.dict.get(PDFName.of('Type'));
       if (type && type.toString() === '/ObjStX') {
         obj.dict.set(PDFName.of('Type'), PDFName.of('ObjStm'));
