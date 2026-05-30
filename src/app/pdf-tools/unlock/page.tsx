@@ -7,7 +7,7 @@ import SEOContent from "@/components/tools/SEOContent";
 import { recordRecentTool } from "@/utils/recentTools";
 import { Download, FileText, Lock, Unlock, Loader2, AlertCircle } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
-import { decryptPDF } from "@pdfsmaller/pdf-decrypt";
+import { decryptPDFCustom as decryptPDF } from "@/utils/pdfDecryptCustom";
 
 export default function PdfUnlockPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -65,7 +65,7 @@ export default function PdfUnlockPage() {
       try {
         decryptedBytes = await decryptPDF(fileBytes, String(password));
       } catch (err: any) {
-        throw new Error("Incorrect password. Please verify and try again.");
+        throw new Error(err.message || "Incorrect password. Please verify and try again.");
       }
 
       // Verify the decrypted PDF loads without any decryption settings
